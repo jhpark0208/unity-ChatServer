@@ -16,13 +16,6 @@ import { logger, stream } from '@utils/logger';
 import socketIO from 'socket.io';
 import * as redis from 'redis';
 import { debug } from 'winston';
-import {
-  public_room,
-  private_room,
-  chatMessage,
-  User,
-  UserinRoom
-} from './redistype';
 
 class App {
   public app: express.Application;
@@ -41,7 +34,9 @@ class App {
       host : "127.0.0.1",
       port : 6379
     });
-
+    
+    this.redisClient.flushall();
+    this.redisClient.rpush("rooms:public", "room1", "room2"); 
     this.initializeMiddlewares();
     this.initializeRoutes(routes);
     this.initializeSwagger();
@@ -66,55 +61,79 @@ class App {
 
     this.io.on('connection', (socket) => {
       console.log('user connect');
-      
-      this.redisClient.lrange("rooms", 0, -1, (err, arr) => {
+
+      this.redisClient.lrange("rooms:public", 0, -1, (err, arr) => {
         socket.emit('initroomlist', {
           msg: arr.toString()
-        });
-        this.redisClient.smembers('connectUsers', (err, arr) => {
-          socket.emit('connectedlist', {
-            msg : arr.toString()
-          });
         });
       })
 
       socket.on("setUserName", (name) => {
-        this.redisClient.sadd('connectUsers', socket.id);
+        console.log(name);
+        this.redisClient.sadd('connectUsers', socket.id + '&' + name);
       });
 
-      socket.on('join', (RoomName) =>{
-        socket.join(RoomName);
-        this.io.to(RoomName).emit('roomjoin', {
-          msg : socket.id + "," + RoomName
-        });
-        
+      socket.on('join', (RoomName, name) =>{
         var time = this.getFormatDate(new Date());
         this.redisClient.rpush(
-          RoomName,
-          time + " " + socket.id + " join " + RoomName
+          'message:'+ RoomName,
+          time + " " + name + " join " + RoomName,
+          (res) => {
+            this.redisClient.lrange('message:' + RoomName, 0, -1, (err, arr) => {
+              arr.forEach((element, index) => {
+                if(index == arr.length - 1){
+                  this.io.to(RoomName).emit('roomChatMessage', {
+                    msg : RoomName + "/" + element
+                  });
+                }
+                else{
+                  socket.emit("roomChatMessage", {
+                    msg : RoomName + '/' + element
+                  })
+                }
+              });
+            });
+          } 
         );
+        socket.join(RoomName);        
       });
       
-      socket.on('sendMessage', (RoomName, Message) => {
-        console.log(RoomName, Message);
-        this.io.to(RoomName).emit("roomChatMessage", {
-          msg : socket.id + ',' + RoomName + ',' + Message
-        })
+      socket.on('sendMessage', (RoomName, name, Message) => {
+        console.log(RoomName, name, Message);
         var time = this.getFormatDate(new Date());
         this.redisClient.rpush(
-          RoomName,
-          time + " " + socket.id + " : " + Message
+          'message:' + RoomName,
+          time + " " + name + " : " + Message,
+          (res) => {
+            this.redisClient.lrange('message:' + RoomName, -1, -1, (err, arr) => {
+              this.io.to(RoomName).emit("roomChatMessage", {
+                msg : RoomName + '/' + arr.toString()
+              })
+            })
+          }
         );
       });
 
-      socket.on('leaveRoom', (RoomName) => {
-        console.log(socket.id + " leave " + RoomName);
+      socket.on('leaveRoom', (RoomName, name) => {
+        console.log(name + " leave " + RoomName);
+        var time = this.getFormatDate(new Date());
+        this.redisClient.rpush(
+          'message:' + RoomName,
+          time + " " + name + " leave " + RoomName,
+          (res) => {
+            this.redisClient.lrange('message:' + RoomName, -1, -1, (err,arr) =>{
+              this.io.to(RoomName).emit('roomChatMessage', {
+                msg : RoomName + "/" + arr.toString()
+              });
+            })
+          }
+        );
         socket.leave(RoomName);
       });
 
       socket.on('getconnectedList', () => {
         this.redisClient.smembers("connectUsers", (err, arr) =>{
-          console.log(arr);
+          // console.log(arr);
           socket.emit('connectedList', {
             msg : arr.toString()
           });
@@ -133,10 +152,18 @@ class App {
 
       socket.on('disconnect', () =>{
         console.log(socket.id + " disconnect");
-        this.redisClient.srem("connectUsers", socket.id);
-        socket.broadcast.emit('disconnectUser', {
-          msg : socket.id
-        });
+        this.redisClient.smembers('connectUsers', (err, arr) =>{
+          var t : any;
+          arr.forEach(element => {
+            if(element.split('&')[0] == socket.id)
+              t = element;
+          });
+          this.redisClient.srem('connectUsers', t, () => {
+            socket.broadcast.emit('disconnectUser', {
+              msg : t.split('&')[1]
+            });
+          })
+        })
       });
 
       socket.on('test', () => {
