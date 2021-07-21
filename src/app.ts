@@ -31,7 +31,7 @@ class App {
     this.port = process.env.PORT || 3000;
     this.env = process.env.NODE_ENV || 'development';
     this.redisClient = redis.createClient({
-      host : "127.0.0.1",
+      host : "redis",
       port : 6379
     });
     
@@ -140,14 +140,11 @@ class App {
         });
       });
 
-      socket.on('sendMessageIndividual', (id, Message) => {
-        console.log(id, Message);
+      socket.on('sendMessageIndividual', (from, to, id, Message) => {
+        console.log(from, to, id, Message);
         socket.to(id).emit("individualChatMessage", {
-          msg : socket.id + ',' + Message
+          msg : from + ',' + Message
         });
-        socket.emit("individualChatMessage", {
-          msg : id + ',' + Message
-        })
       });
 
       socket.on('disconnect', () =>{
@@ -165,9 +162,6 @@ class App {
           })
         })
       });
-
-      socket.on('test', () => {
-      })
     })
   }
 
