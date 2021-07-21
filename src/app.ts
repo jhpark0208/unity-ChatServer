@@ -16,11 +16,13 @@ import { logger, stream } from '@utils/logger';
 import socketIO from 'socket.io';
 import * as redis from 'redis';
 import { debug } from 'winston';
-
-export class User {
-  name : string;
-  socketid : string;
-}
+import {
+  public_room,
+  private_room,
+  chatMessage,
+  User,
+  UserinRoom
+} from './redistype';
 
 class App {
   public app: express.Application;
@@ -29,6 +31,7 @@ class App {
   public server: any;
   public io : socketIO.Server;
   public redisClient : redis.RedisClient;
+
 
   constructor(routes: Routes[]) {
     this.app = express();
