@@ -3,7 +3,7 @@ version: '3.7'
 services:
   proxy:
     image: nginx:alpine
-    container_name: proxy
+    container_name: chat_proxy
     ports:
       - '80:80'
     volumes:
@@ -16,7 +16,7 @@ services:
       context: ./
       target: production-build-stage
       dockerfile: Dockerfile
-    container_name: server
+    container_name: chat_server
     ports:
       - '3000:3000'
     volumes:
@@ -27,7 +27,7 @@ services:
       - backend
   redis:
     image: redis:alpine
-    container_name : redis
+    container_name : chat_redis
     hostname : redis
     ports:
       - '6379:6379'
