@@ -31,7 +31,7 @@ class App {
     this.port = process.env.PORT || 3000;
     this.env = process.env.NODE_ENV || 'development';
     this.redisClient = redis.createClient({
-      host : "redis",
+      host : "127.0.0.1",
       port : 6379
     });
     
@@ -66,6 +66,29 @@ class App {
         socket.emit('initroomlist', {
           msg: arr.toString()
         });
+      })
+
+      socket.on('makePrivateRoomRequest', (RoomName, users) => {
+        console.log(RoomName, users);
+
+        var user : string[];
+        user = users.split(',');
+        for(var i = 0; i < user.length;i++){
+          var u = user[i].split(':');
+          console.log(u);
+
+          this.io.to(u[1]).emit('roomInvite', {
+            msg : RoomName
+          })
+        }
+      })
+
+      socket.on('inviteApprove', (RoomName, name) => {
+        this.redisClient.rpush(name + ":rooms", (res) => {
+          socket.emit('initroomlist', {
+            msg : RoomName
+          })
+        })
       })
 
       socket.on("setUserName", (name) => {
